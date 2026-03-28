@@ -6,8 +6,15 @@ const UserSchema = new mongoose.Schema({
   role: { type: String, default: 'customer' },
   phone: String,
   location: {
-  type: "Point",
-  coordinates: [req.body.longitude, req.body.latitude]
+  type: {
+    type: String,
+    enum: ["Point"],
+    default: "Point"
+  },
+  coordinates: {
+    type: [Number],
+    default: [0, 0]
+  }
 },
   
   serviceType: String,
