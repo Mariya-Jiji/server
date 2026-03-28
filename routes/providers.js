@@ -25,8 +25,24 @@ router.get('/:serviceType', async (req, res) => {
       const maxRadius = parseFloat(radius) || 50; // default 50km
 
       providers = providers.filter(p => {
-        if (!p.latitude || !p.longitude) return true; // include providers with no location
-        const dist = getDistanceKm(userLat, userLng, p.latitude, p.longitude);
+        if (lat && lng) {
+  const userLat = parseFloat(lat);
+  const userLng = parseFloat(lng);
+  const maxRadius = parseFloat(radius) || 50;
+
+  providers = providers.filter(p => {
+    if (!p.location || !p.location.coordinates) return true;
+
+    const [providerLng, providerLat] = p.location.coordinates;
+
+    const dist = getDistanceKm(userLat, userLng, providerLat, providerLng);
+
+    p.distanceKm = parseFloat(dist.toFixed(1));
+    return dist <= maxRadius;
+  });
+
+  providers.sort((a, b) => (a.distanceKm || 9999) - (b.distanceKm || 9999));
+}
         p.distanceKm = parseFloat(dist.toFixed(1));
         return dist <= maxRadius;
       });
