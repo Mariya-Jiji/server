@@ -24,7 +24,9 @@ app.use('/api/tracking', require('./routes/tracking'));
 
 const complaintsRoutes = require('./routes/complaints');
 app.use('/api/complaints', complaintsRoutes);
-
+app.get("/", (req, res) => {
+  res.send("HomeEase backend is running 🚀");
+});
 
 app.listen(process.env.PORT, () =>
   console.log(`Server running on port ${process.env.PORT}`)
