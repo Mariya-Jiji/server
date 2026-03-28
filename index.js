@@ -21,6 +21,8 @@ app.use('/api/providers', require('./routes/providers'));
 app.use('/api/bookings', require('./routes/bookings'));
 app.use('/api/admin', require('./routes/admin'));
 
+app.use('/api/tracking', require('./routes/tracking'));
+
 
 const allowedOrigins = [
   "http://localhost:3000",
