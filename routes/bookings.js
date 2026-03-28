@@ -120,8 +120,9 @@ router.put('/:id/confirm-customer-payment', auth, async (req, res) => {
     }
     
     // Only allow confirmation for payment_initiated bookings
+    console.log('Confirm payment attempt - status:', booking.status);
     if (booking.status !== 'payment_initiated') {
-      return res.status(400).json({ msg: 'Payment must be initiated first.' });
+      return res.status(400).json({ msg: `Confirm payment only for 'payment_initiated'. Current: ${booking.status}` });
     }
     
     const updatedBooking = await Booking.findByIdAndUpdate(
