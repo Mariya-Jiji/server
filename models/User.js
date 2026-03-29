@@ -20,7 +20,7 @@ const UserSchema = new mongoose.Schema({
   serviceType: String,
   idProof: String,
   status: { type: String, default: 'pending' }, // 'pending', 'approved', 'rejected'
-  notifications: [{ message: String, date: { type: Date, default: Date.now }, read: { type: Boolean, default: false } }],
+  notifications: [{ message: String, date: { type: Date, default: Date.now }, read: { type: Boolean, default: false } }],\n  finePending: { type: Boolean, default: false },
   rating: { type: Number, default: 0 },
   reviewCount: { type: Number, default: 0 },
   favorites: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]

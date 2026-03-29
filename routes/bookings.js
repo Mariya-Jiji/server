@@ -3,28 +3,7 @@ const Booking = require('../models/Booking');
 const User = require('../models/User');
 const auth = require('../middleware/auth');
 
-// Create booking
-router.post('/', auth, async (req, res) => {
-  try {
-    const booking = new Booking({ ...req.body, customer: req.user.id });
-    await booking.save();
-    
-    // Notify provider of new booking request
-    const populatedBooking = booking.populate('provider customer');
-    const provider = await User.findById(req.body.provider);
-    if (provider) {
-      provider.notifications.push({ 
-        message: `New booking request from ${req.body.customerName} for ${req.body.serviceType.replace('_', ' ')} on ${req.body.date}.`, 
-        read: false 
-      });
-      await provider.save();
-    }
-    
-    res.json(booking);
-  } catch (err) {
-    res.status(500).json({ msg: err.message });
-  }
-});
+// Create booking\nrouter.post('/', auth, async (req, res) => {\n  try {\n    const user = await User.findById(req.user.id);\n    if (user.role === 'customer' && user.finePending) {\n      return res.status(403).json({ msg: 'Cannot create new bookings. You have pending fine payment confirmation from provider(s).' });\n    }\n    \n    const booking = new Booking({ ...req.body, customer: req.user.id });\n    await booking.save();\n    \n    // Notify provider of new booking request\n    const populatedBooking = booking.populate('provider customer');\n    const provider = await User.findById(req.body.provider);\n    if (provider) {\n      provider.notifications.push({ \n        message: `New booking request from ${req.body.customerName} for ${req.body.serviceType.replace('_', ' ')} on ${req.body.date}.`, \n        read: false \n      });\n      await provider.save();\n    }\n    \n    res.json(booking);\n  } catch (err) {\n    res.status(500).json({ msg: err.message });\n  }\n});
 
 // Get bookings for customer
 router.get('/customer', auth, async (req, res) => {
@@ -202,78 +181,9 @@ router.put('/:id/pay-cancellation-fee', auth, async (req, res) => {
   }
 });
 
-// Provider confirms cancellation fee received
-router.put('/:id/confirm-cancellation-fee', auth, async (req, res) => {
-  try {
-    const booking = await Booking.findById(req.params.id);
-    
-    // Verify that the authenticated user is the provider
-    if (booking.provider.toString() !== req.user.id) {
-      return res.status(403).json({ msg: 'Only the provider can confirm cancellation fee.' });
-    }
-    
-    // Only allow confirmation for cancelled bookings with unpaid fees
-    if (booking.status !== 'cancelled' || booking.cancellationFee <= 0 || booking.cancellationFeeConfirmed) {
-      return res.status(400).json({ msg: 'Invalid cancellation fee confirmation request.' });
-    }
-    
-    const updatedBooking = await Booking.findByIdAndUpdate(
-      req.params.id,
-      { cancellationFeeConfirmed: true },
-      { new: true }
-    );
-    res.json(updatedBooking);
-  } catch (err) {
-    res.status(500).json({ msg: err.message });
-  }
-});
+// Provider confirms cancellation fee received\nrouter.put('/:id/confirm-cancellation-fee', auth, async (req, res) => {\n  try {\n    const booking = await Booking.findById(req.params.id);\n    \n    // Verify that the authenticated user is the provider\n    if (booking.provider.toString() !== req.user.id) {\n      return res.status(403).json({ msg: 'Only the provider can confirm cancellation fee.' });\n    }\n    \n    // Only allow confirmation for cancelled bookings with unpaid fees\n    if (booking.status !== 'cancelled' || booking.cancellationFee <= 0 || booking.cancellationFeeConfirmed) {\n      return res.status(400).json({ msg: 'Invalid cancellation fee confirmation request.' });\n    }\n    \n    const updatedBooking = await Booking.findByIdAndUpdate(\n      req.params.id,\n      { cancellationFeeConfirmed: true },\n      { new: true }\n    );\n    \n    // Check if customer has any other unconfirmed fines. If none, unblock\n    const customer = await User.findById(booking.customer);\n    const pendingFines = await Booking.countDocuments({\n      customer: booking.customer,\n      status: 'cancelled',\n      cancellationFee: { $gt: 0 },\n      cancellationFeeConfirmed: false\n    });\n    \n    if (pendingFines === 0) {\n      customer.finePending = false;\n      await customer.save();\n      // Notify customer\n      customer.notifications.push({\n        message: 'All fine payments confirmed. You can now book new services!',\n        read: false\n      });\n      await customer.save();\n    }\n    \n    res.json(updatedBooking);\n  } catch (err) {\n    res.status(500).json({ msg: err.message });\n  }\n});
 
-// Cancel booking (customer)
-router.put('/:id/cancel', auth, async (req, res) => {
-  try {
-    const booking = await Booking.findById(req.params.id);
-    if (!booking) return res.status(404).json({ msg: 'Booking not found' });
-
-    if (booking.customer.toString() !== req.user.id) {
-      return res.status(403).json({ msg: 'Only customer can cancel this booking.' });
-    }
-
-    if (['paid', 'cancelled'].includes(booking.status)) {
-      return res.status(400).json({ msg: 'This booking cannot be cancelled.' });
-    }
-
-    // If provider already started move (shared location while accepted), apply 100rs cancellation fee
-    let cancellationFee = 0;
-    if (booking.status === 'accepted' && (booking.providerCurrentLatitude || booking.providerCurrentLongitude)) {
-      cancellationFee = 100;
-      booking.cancellationFee = 100;
-    }
-
-    booking.status = 'cancelled';
-    await booking.save();
-    
-    // Add notifications for cancel
-    const populatedBooking = await Booking.findById(req.params.id).populate('customer provider');
-    const customer = populatedBooking.customer;
-    const provider = populatedBooking.provider;
-    const feeMsg = cancellationFee > 0 ? ` Cancellation fee of ₹${cancellationFee} applies.` : '';
-    customer.notifications.push({ message: `Your booking has been cancelled.${feeMsg}`, read: false });
-    if (cancellationFee > 0) {
-      provider.notifications.push({ message: `Booking cancelled by customer. Cancellation fee ₹${cancellationFee} pending payment.`, read: false });
-    }
-    await customer.save();
-    if (cancellationFee > 0) await provider.save();
-
-    const responseBody = {
-      ...booking.toObject(),
-      cancellationFee
-    };
-
-    res.json(responseBody);
-  } catch (err) {
-    res.status(500).json({ msg: err.message });
-  }
-});
+// Cancel booking (customer)\nrouter.put('/:id/cancel', auth, async (req, res) => {\n  try {\n    const booking = await Booking.findById(req.params.id);\n    if (!booking) return res.status(404).json({ msg: 'Booking not found' });\n\n    if (booking.customer.toString() !== req.user.id) {\n      return res.status(403).json({ msg: 'Only customer can cancel this booking.' });\n    }\n\n    if (['paid', 'cancelled'].includes(booking.status)) {\n      return res.status(400).json({ msg: 'This booking cannot be cancelled.' });\n    }\n\n    // If provider already started move (shared location while accepted), apply 100rs cancellation fee\n    let cancellationFee = 0;\n    if (booking.status === 'accepted' && (booking.providerCurrentLatitude || booking.providerCurrentLongitude)) {\n      cancellationFee = 100;\n      booking.cancellationFee = 100;\n    }\n\n    booking.status = 'cancelled';\n    await booking.save();\n    \n    // If fine applied, block customer from new bookings\n    if (cancellationFee > 0) {\n      const customer = await User.findById(booking.customer);\n      customer.finePending = true;\n      await customer.save();\n    }\n    \n    // Add notifications for cancel\n    const populatedBooking = await Booking.findById(req.params.id).populate('customer provider');\n    const customer = populatedBooking.customer;\n    const provider = populatedBooking.provider;\n    const feeMsg = cancellationFee > 0 ? ` Cancellation fee of ₹${cancellationFee} applies. You cannot book new services until provider confirms payment.` : '';\n    customer.notifications.push({ message: `Your booking has been cancelled.${feeMsg}`, read: false });\n    if (cancellationFee > 0) {\n      provider.notifications.push({ message: `Booking cancelled by customer. Cancellation fee ₹${cancellationFee} pending payment. Please confirm receipt to unblock customer.`, read: false });\n    }\n    await customer.save();\n    if (cancellationFee > 0) await provider.save();\n\n    const responseBody = {\n      ...booking.toObject(),\n      cancellationFee\n    };\n\n    res.json(responseBody);\n  } catch (err) {\n    res.status(500).json({ msg: err.message });\n  }\n});
 
 // Submit review
 router.put('/:id/review', auth, async (req, res) => {
