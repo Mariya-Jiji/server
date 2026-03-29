@@ -10,7 +10,9 @@ const BookingSchema = new mongoose.Schema({
   serviceType: String,
   status: { type: String, default: 'pending' },
   cancellationFee: { type: Number, default: 0 },
-  cancellationFeeConfirmed: { type: Boolean, default: false },
+  cancellationFeePaid: { type: Boolean, default: false }, // Customer paid
+  cancellationFeeConfirmed: { type: Boolean, default: false }, // Provider confirmed
+
   workDescription: String,
   amount: Number,
   paymentDone: { type: Boolean, default: false },

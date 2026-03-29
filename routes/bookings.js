@@ -191,10 +191,21 @@ router.put('/:id/pay-cancellation-fee', auth, async (req, res) => {
     
     const updatedBooking = await Booking.findByIdAndUpdate(
       req.params.id,
-      { cancellationFeeConfirmed: true },
+      { cancellationFeePaid: true }, // Customer paid, awaiting provider confirm
       { new: true }
     );
+    
+    // Notify provider customer paid cancellation fee
+    const populatedBooking = await Booking.findById(req.params.id).populate('provider customer');
+    const provider = populatedBooking.provider;
+    provider.notifications.push({ 
+      message: `Customer ${populatedBooking.customer.name} paid cancellation fee ₹${booking.cancellationFee}. Please confirm receipt.`, 
+      read: false 
+    });
+    await provider.save();
+    
     res.json(updatedBooking);
+
   } catch (err) {
     res.status(500).json({ msg: err.message });
   }
@@ -209,8 +220,8 @@ router.put('/:id/confirm-cancellation-fee', auth, async (req, res) => {
       return res.status(403).json({ msg: 'Only the provider can confirm cancellation fee.' });
     }
     
-    if (booking.status !== 'cancelled' || booking.cancellationFee <= 0 || booking.cancellationFeeConfirmed) {
-      return res.status(400).json({ msg: 'Invalid cancellation fee confirmation request.' });
+    if (booking.status !== 'cancelled' || booking.cancellationFee <= 0 || booking.cancellationFeeConfirmed || !booking.cancellationFeePaid) {
+      return res.status(400).json({ msg: 'Customer must pay fine first. Confirm only after payment.' });
     }
     
     const updatedBooking = await Booking.findByIdAndUpdate(
